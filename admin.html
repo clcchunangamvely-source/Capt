@@ -1,0 +1,150 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - CLC CHUNANGAMVELY</title>
+    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="nav-brand">
+            <h1>CLC CHUNANGAMVELY - Admin</h1>
+        </div>
+        <a href="/" class="nav-toggle" style="text-decoration: none; color: #3ba7ff;">
+            <i class="fas fa-home"></i>
+        </a>
+    </nav>
+
+    <main class="main-content">
+        <div class="container">
+            <!-- PIN Section -->
+            <div id="pinSection">
+                <div class="header-section" style="color: #3ba7ff; margin-bottom: 2rem;">
+                    <h2><i class="fas fa-lock"></i> Secure Access</h2>
+                    <p class="subtitle">Enter admin PIN to continue</p>
+                </div>
+                <input type="password" id="adminPin" placeholder="Enter Admin PIN" maxlength="4">
+                <button onclick="checkPin()" style="width: 100%;">
+                    <i class="fas fa-sign-in-alt"></i> Login
+                </button>
+                <p id="pinError"></p>
+            </div>
+
+            <!-- Form Section -->
+            <div id="formSection" style="display:none;">
+                <div class="header-section" style="color: #3ba7ff; margin-bottom: 2rem;">
+                    <h2><i class="fas fa-edit"></i> Edit Points</h2>
+                    <p class="subtitle">Update group points</p>
+                </div>
+                
+                <div class="table-container">
+                    <table id="editTable">
+                        <thead>
+                            <tr>
+                                <th><i class="fas fa-users"></i> Group Name</th>
+                                <th><i class="fas fa-star"></i> Current Points</th>
+                                <th><i class="fas fa-plus-minus"></i> Change Points</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                
+                <button id="saveBtn" style="width: 100%; margin-top: 1rem;">
+                    <i class="fas fa-save"></i> Save Changes
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const correctPIN = "2503";
+        let pointsData = {};
+
+        async function checkPin() {
+            const entered = document.getElementById("adminPin").value;
+            const errorElement = document.getElementById("pinError");
+            
+            if (entered === correctPIN) {
+                document.getElementById("pinSection").style.display = "none";
+                document.getElementById("formSection").style.display = "block";
+                loadPoints();
+                errorElement.textContent = "";
+            } else {
+                errorElement.textContent = "Incorrect PIN! Please try again.";
+                document.getElementById("adminPin").value = "";
+                document.getElementById("adminPin").focus();
+            }
+        }
+
+        async function loadPoints() {
+            try {
+                const res = await fetch("/api/points");
+                const data = await res.json();
+                pointsData = data.points || data;
+                const tbody = document.querySelector("#editTable tbody");
+                tbody.innerHTML = "";
+                
+                for (const group in pointsData) {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="group-name">${group}</td>
+                        <td class="points-cell">${pointsData[group]}</td>
+                        <td>
+                            <input type="number" id="change-${group}" value="0" 
+                                   style="text-align: center;" 
+                                   placeholder="±0">
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                }
+            } catch (error) {
+                console.error('Error loading points:', error);
+                alert('Error loading data. Please refresh the page.');
+            }
+        }
+
+        document.getElementById("saveBtn").addEventListener("click", async () => {
+            try {
+                for (const group in pointsData) {
+                    const change = parseInt(document.getElementById(`change-${group}`).value) || 0;
+                    pointsData[group] += change;
+                }
+                
+                const updateData = {
+                    points: pointsData,
+                    lastUpdated: new Date().toISOString()
+                };
+                
+                await fetch("/api/points", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(updateData)
+                });
+                
+                alert("Points updated successfully!");
+                loadPoints(); // Reload to show updated values
+            } catch (error) {
+                console.error('Error saving points:', error);
+                alert('Error saving changes. Please try again.');
+            }
+        });
+
+        // Allow Enter key to submit PIN
+        document.getElementById("adminPin").addEventListener("keypress", function(event) {
+            if (event.key === "Enter") {
+                checkPin();
+            }
+        });
+
+        // Auto-focus PIN input
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById("adminPin").focus();
+        });
+    </script>
+</body>
+</html>
