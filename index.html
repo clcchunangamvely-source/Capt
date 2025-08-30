@@ -1,0 +1,290 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CLC CHUNANGAMVELY - Points Tracker</title>
+    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="nav-brand">
+            <h1>CLC CHUNANGAMVELY</h1>
+        </div>
+        <button class="nav-toggle" onclick="toggleNav()">
+            <i class="fas fa-bars"></i>
+        </button>
+    </nav>
+
+    <!-- Side Navigation -->
+    <div class="sidenav" id="sideNav">
+        <div class="sidenav-header">
+            <h3>Menu</h3>
+            <button class="close-btn" onclick="toggleNav()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="sidenav-content">
+            <a href="/admin" class="nav-item">
+                <i class="fas fa-edit"></i>
+                <span>Edit Points</span>
+            </a>
+            <a href="#" class="nav-item" onclick="showChart()">
+                <i class="fas fa-chart-bar"></i>
+                <span>Report Chart</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Overlay -->
+    <div class="overlay" id="overlay" onclick="toggleNav()"></div>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="container">
+            <div class="header-section">
+                <h2>Current Standings</h2>
+                <p class="subtitle">Live points tracking</p>
+                <div class="last-updated">
+                    <i class="fas fa-clock"></i>
+                    <span id="lastUpdated">Loading...</span>
+                </div>
+                
+                <!-- Sort Dropdown -->
+                <div class="sort-controls">
+                    <label for="sortSelect">Sort by:</label>
+                    <select id="sortSelect" onchange="changeSortOrder()">
+                        <option value="rank">By Rank</option>
+                        <option value="group">By Group Name</option>
+                        <option value="groupNumber">By Group Number</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Points Table -->
+            <div class="table-container">
+                <table class="points-table" id="pointsTable">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Group Name</th>
+                            <th>Points</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                        <!-- Data will be loaded here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Chart Modal -->
+            <div class="modal" id="chartModal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>Points Chart</h3>
+                        <button class="close-modal" onclick="closeChart()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="pointsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        let pointsData = {};
+        let chart = null;
+
+        // Load points data
+        async function loadPoints() {
+            try {
+                const response = await fetch('/api/points');
+                const data = await response.json();
+                pointsData = data.points || data;
+                updateTable();
+                updateLastUpdated(data.lastUpdated);
+            } catch (error) {
+                console.error('Error loading points:', error);
+            }
+        }
+
+        // Update last updated timestamp
+        function updateLastUpdated(timestamp) {
+            const lastUpdatedElement = document.getElementById('lastUpdated');
+            if (timestamp) {
+                const date = new Date(timestamp);
+                const options = {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                };
+                lastUpdatedElement.textContent = `Last updated: ${date.toLocaleDateString('en-US', options)}`;
+            } else {
+                lastUpdatedElement.textContent = 'Last updated: Just now';
+            }
+        }
+
+        // Define group order and class information
+        const groupOrder = ['Lourdes', 'Carmel', 'Loretto', 'Morning Star', 'Rosa Mystica'];
+        const groupClasses = {
+            'Lourdes': '8A, 11A',
+            'Carmel': '9B, 12B',
+            'Loretto': '8B, 10A',
+            'Morning Star': '9A, 12A',
+            'Rosa Mystica': '10B, 11B'
+        };
+
+        // Update table with sorted data
+        function updateTable() {
+            const tbody = document.getElementById('tableBody');
+            const sortSelect = document.getElementById('sortSelect');
+            const sortBy = sortSelect ? sortSelect.value : 'rank';
+            
+            let sortedGroups;
+            if (sortBy === 'group') {
+                // Sort by group name alphabetically
+                sortedGroups = Object.entries(pointsData)
+                    .sort((a, b) => a[0].localeCompare(b[0]));
+            } else if (sortBy === 'groupNumber') {
+                // Sort by group number (predefined order)
+                sortedGroups = groupOrder
+                    .filter(group => pointsData.hasOwnProperty(group))
+                    .map(group => [group, pointsData[group]]);
+            } else {
+                // Sort by rank (points descending)
+                sortedGroups = Object.entries(pointsData)
+                    .sort((a, b) => b[1] - a[1]);
+            }
+
+            tbody.innerHTML = '';
+            sortedGroups.forEach(([group, points], index) => {
+                const rank = sortBy === 'group' || sortBy === 'groupNumber' ? 
+                    Object.entries(pointsData).sort((a, b) => b[1] - a[1]).findIndex(([g]) => g === group) + 1 : 
+                    index + 1;
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="rank-cell">
+                        <span class="rank-badge rank-${rank}">${rank}</span>
+                    </td>
+                    <td class="group-name clickable-group" onclick="showGroupInfo('${group}')">${group}</td>
+                    <td class="points-cell">
+                        <span class="points-value">${points}</span>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // Change sort order
+        function changeSortOrder() {
+            updateTable();
+        }
+
+        // Show group information
+        function showGroupInfo(groupName) {
+            const points = pointsData[groupName];
+            const rank = Object.entries(pointsData)
+                .sort((a, b) => b[1] - a[1])
+                .findIndex(([group]) => group === groupName) + 1;
+            const classes = groupClasses[groupName] || 'Classes not defined';
+            
+            alert(`${groupName} - ${classes}`);
+        }
+
+        // Navigation functions
+        function toggleNav() {
+            const sideNav = document.getElementById('sideNav');
+            const overlay = document.getElementById('overlay');
+            
+            sideNav.classList.toggle('active');
+            overlay.classList.toggle('active');
+        }
+
+        // Chart functions
+        function showChart() {
+            const modal = document.getElementById('chartModal');
+            modal.style.display = 'flex';
+            createChart();
+            toggleNav(); // Close side nav
+        }
+
+        function closeChart() {
+            const modal = document.getElementById('chartModal');
+            modal.style.display = 'none';
+            if (chart) {
+                chart.destroy();
+                chart = null;
+            }
+        }
+
+        function createChart() {
+            const ctx = document.getElementById('pointsChart').getContext('2d');
+            const groups = Object.keys(pointsData);
+            const points = Object.values(pointsData);
+
+            if (chart) {
+                chart.destroy();
+            }
+
+            chart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: groups,
+                    datasets: [{
+                        label: 'Points',
+                        data: points,
+                        backgroundColor: [
+                            '#3ba7ff',
+                            '#ff5722',
+                            '#4caf50',
+                            '#ff9800',
+                            '#9c27b0'
+                        ],
+                        borderColor: '#3ba7ff',
+                        borderWidth: 2,
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: '#ecf0f1'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Auto-refresh every 30 seconds
+        setInterval(loadPoints, 30000);
+
+        // Initial load
+        document.addEventListener('DOMContentLoaded', loadPoints);
+    </script>
+</body>
+</html>
